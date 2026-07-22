@@ -1,0 +1,26 @@
+**/.venv/
+**/.venv-docs/
+**/.DS_Store
+__pycache__/
+*.py[cod]
+
+# Local Python environments and downloaded third-party robot assets.
+external/
+#assets/unitree_g1/
+#assets/unitree_g1_throw/
+
+# Generated simulation, training, and documentation output.
+logs/
+site/
+policies/
+checkpoints/
+runs/
+*.zip
+
+# Legacy three-link throwing exercise; not part of the G1 ball-drop task.
+assets/three_link_throw.xml
+envs/three_link_throw_env.py
+scripts/evaluate_throw.py
+scripts/play_throw.py
+scripts/random_policy_viewer.py
+scripts/train_throw.py

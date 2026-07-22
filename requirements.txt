@@ -1,0 +1,12 @@
+mujoco
+gymnasium
+numpy
+scipy
+matplotlib
+pandas
+tqdm
+stable-baselines3
+torch
+tensorboard
+mkdocs
+mkdocs-material
