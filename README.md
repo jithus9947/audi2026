@@ -29,10 +29,13 @@ Fetch the G1 assets once:
 
 ```bash
 mkdir -p external assets/unitree_g1
-git clone --depth 1 --filter=blob:none --sparse https://github.com/google-deepmind/mujoco_menagerie.git external/mujoco_menagerie
-git -C external/mujoco_menagerie sparse-checkout set unitree_g1
-git -C external/mujoco_menagerie archive HEAD unitree_g1 | tar -x -C assets --strip-components=1
+git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git external/mujoco_menagerie
+cp -R external/mujoco_menagerie/unitree_g1/. assets/unitree_g1/
 ```
+
+The full shallow clone is intentional: the G1 XML files reference mesh assets,
+so a filtered/sparse checkout can leave required files unavailable on another
+machine.
 
 Generate the ball-drop scene:
 
