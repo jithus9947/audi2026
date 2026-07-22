@@ -17,7 +17,8 @@ The target and ball scene are generated as `assets/unitree_g1/scene_throw.xml` f
 ## Setup
 
 ```bash
-cd /Users/jithus/Desktop/mujoco/humanoid-robot-fundamentals
+git clone https://github.com/jithus9947/audi2026.git
+cd audi2026
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
