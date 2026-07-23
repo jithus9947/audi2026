@@ -22,8 +22,19 @@ git clone https://github.com/jithus9947/audi2026.git
 cd audi2026
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+On Windows PowerShell, use:
+
+```powershell
+git clone https://github.com/jithus9947/audi2026.git
+cd audi2026
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
 No separate Unitree or MuJoCo Menagerie clone is required. The G1 XML, meshes,
@@ -54,10 +65,24 @@ Current deterministic baseline result (10 episodes):
 | Average reward | 10.46 |
 | Average release time | 0.740 s |
 
-To visualize the same controller on macOS, use MuJoCo's `mjpython` launcher:
+To visualize the baseline, use the command for your operating system.
+
+macOS requires MuJoCo's `mjpython` launcher:
 
 ```bash
 mjpython scripts/play_baseline_g1_throw.py
+```
+
+Linux:
+
+```bash
+python scripts/play_baseline_g1_throw.py
+```
+
+Windows PowerShell:
+
+```powershell
+python scripts\play_baseline_g1_throw.py
 ```
 
 Close the MuJoCo window or press `Ctrl+C` to stop it.
@@ -117,12 +142,25 @@ The PPO evaluator reports success rate, landing error, completion time, robot
 falls, and mean action change (smoothness), matching the intended comparison
 metrics.
 
-To watch the learned PPO policy in MuJoCo on macOS, use `mjpython` (not plain
-`python`):
+To watch the learned PPO policy on macOS, use `mjpython`:
 
 ```bash
 mjpython scripts/play_ppo_g1_drop.py \
   --model policies/g1_ball_drop_ppo/best_model.zip
+```
+
+On Linux:
+
+```bash
+python scripts/play_ppo_g1_drop.py \
+  --model policies/g1_ball_drop_ppo/best_model.zip
+```
+
+On Windows PowerShell:
+
+```powershell
+python scripts\play_ppo_g1_drop.py `
+  --model policies\g1_ball_drop_ppo\best_model.zip
 ```
 
 Use `--speed 0.5` for slow motion. The viewer continually resets and plays new
