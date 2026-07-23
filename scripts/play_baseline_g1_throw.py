@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Visualize the deterministic baseline G1 throw in MuJoCo."""
+"""Visualize the deterministic open-loop G1 throw in MuJoCo."""
 
 from pathlib import Path
 import sys
@@ -16,6 +16,13 @@ from envs.g1_fixed_body_throw_env import G1FixedBodyThrowEnv
 
 def main():
     env = G1FixedBodyThrowEnv(learned_release=True)
+    # The target belongs to the PPO drop environment. This baseline is a free
+    # forward throw, so hide the non-colliding target marker in this viewer.
+    target_geom = mujoco.mj_name2id(
+        env.model, mujoco.mjtObj.mjOBJ_GEOM, "throw_target_geom"
+    )
+    if target_geom >= 0:
+        env.model.geom_rgba[target_geom, 3] = 0.0
     controller = BaselineController(env.n_arm)
     obs, _ = env.reset(seed=42)
 
@@ -30,8 +37,8 @@ def main():
 
             if terminated or truncated:
                 print(
-                    f"episode complete: best distance={info['best_dist']:.3f} m, "
-                    f"release={info['release_time']:.2f} s"
+                    f"throw complete: release={info['release_time']:.2f} s, "
+                    f"fell={info['robot_fell']}"
                 )
                 obs, _ = env.reset(seed=42)
 
