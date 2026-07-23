@@ -28,6 +28,11 @@ THROW_END_JOINT_TARGET_RAD = np.array(
 FORWARD_SWING_START = 0.12
 RELEASE_TIME = 0.50
 
+# The target shoulder and wrist angles are more than 0.5 rad from the nominal
+# pose. This range is used only by the deterministic baseline; the PPO drop
+# environment keeps its original 0.5-rad action scale.
+BASELINE_ACTION_SCALE = 2.0
+
 
 class BaselineController:
     """Move from a safe pose into a forward swing, then release the ball."""

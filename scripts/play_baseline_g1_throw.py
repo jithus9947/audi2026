@@ -11,12 +11,15 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from baselines.baseline_controller import BaselineController
+from baselines.baseline_controller import BASELINE_ACTION_SCALE, BaselineController
 from envs.g1_fixed_body_throw_env import G1FixedBodyThrowEnv
 
 
 def main():
-    env = G1FixedBodyThrowEnv(learned_release=True)
+    env = G1FixedBodyThrowEnv(
+        learned_release=True,
+        action_scale=BASELINE_ACTION_SCALE,
+    )
     # The target belongs to the PPO drop environment. This baseline is a free
     # forward throw, so hide the non-colliding target marker in this viewer.
     target_geom = mujoco.mj_name2id(

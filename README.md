@@ -85,6 +85,10 @@ prints if any supplied joint value is clipped to a G1 safety limit. Increase
 `RELEASE_TIME` for a slower arm swing or reduce it slightly for a faster throw.
 Keep `FORWARD_SWING_START < RELEASE_TIME`.
 
+The baseline viewer uses a wider, baseline-only arm action range so the stated
+radian targets can actually be reached. PPO continues to use its original
+action scaling and is not affected.
+
 ## Evaluation metrics
 
 Both the baseline and PPO should be evaluated with the same metrics:

@@ -8,13 +8,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from envs.g1_fixed_body_throw_env import G1FixedBodyThrowEnv
-from baselines.baseline_controller import BaselineController
+from baselines.baseline_controller import BASELINE_ACTION_SCALE, BaselineController
 
 
 def evaluate(num_episodes=10, base_seed=42):
 
     env = G1FixedBodyThrowEnv(
-        learned_release=True
+        learned_release=True,
+        action_scale=BASELINE_ACTION_SCALE,
     )
 
     controller = BaselineController(
