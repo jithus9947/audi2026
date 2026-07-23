@@ -41,7 +41,10 @@ class G1FixedBodyThrowEnv(gym.Env):
         self.action_space=spaces.Box(-1,1,shape=(self.n_arm+1,),dtype=np.float32)
         obs_dim=self.n_arm+self.n_arm+3+3+3+(self.n_arm+1)+1+1; self.observation_space=spaces.Box(-np.inf,np.inf,shape=(obs_dim,),dtype=np.float32)
         self.prev_action=np.zeros(self.n_arm+1); self.nominal_qpos=np.zeros(self.model.nq); self.nominal_ctrl=np.zeros(self.model.nu); self.locked_hand_qpos=None; self._init_nominal_pose()
-        self.ball_radius=float(self.model.geom_size[self.ball_geom_id,0]); self.step_count=0; self.released=False; self.release_time=None; self.best_dist=np.inf; self.landing_error=None; self.success=False
+        self.base_body_id=mujoco.mj_name2id(self.model,mujoco.mjtObj.mjOBJ_BODY,'pelvis')
+        self.nominal_base_height=float(self.data.xpos[self.base_body_id,2]) if self.base_body_id >= 0 else 0.0
+        self.fall_height=0.55*self.nominal_base_height
+        self.ball_radius=float(self.model.geom_size[self.ball_geom_id,0]); self.step_count=0; self.released=False; self.release_time=None; self.best_dist=np.inf; self.landing_error=None; self.success=False; self.robot_fell=False
     def _find_right_arm_joint_names(self):
         all_names=[mujoco.mj_id2name(self.model,mujoco.mjtObj.mjOBJ_JOINT,i) for i in range(self.model.njnt)]; all_names=[n for n in all_names if n]
         preferred=['right_shoulder_pitch_joint','right_shoulder_roll_joint','right_shoulder_yaw_joint','right_elbow_joint','right_wrist_roll_joint','right_wrist_pitch_joint','right_wrist_yaw_joint']
@@ -94,7 +97,7 @@ class G1FixedBodyThrowEnv(gym.Env):
         self.data.ctrl[:]=self.nominal_ctrl; self.data.qpos[self.arm_qpos_adr]+=self.np_random.uniform(-0.03,0.03,self.n_arm); self._lock_hand()
         if self.hold_eq_id>=0: self.data.eq_active[self.hold_eq_id]=1
         mujoco.mj_forward(self.model,self.data); self._place_ball_in_hand(); self.model.body_pos[self.target_body_id]=self.target_pos; mujoco.mj_forward(self.model,self.data)
-        self.step_count=0; self.released=False; self.release_time=None; self.best_dist=np.inf; self.landing_error=None; self.success=False; self.prev_action=np.zeros(self.n_arm+1)
+        self.step_count=0; self.released=False; self.release_time=None; self.best_dist=np.inf; self.landing_error=None; self.success=False; self.robot_fell=False; self.prev_action=np.zeros(self.n_arm+1)
         return self._get_obs(), {}
     def step(self, action):
         action=np.clip(np.asarray(action,dtype=np.float64),-1,1); self.data.ctrl[:]=self.nominal_ctrl
@@ -113,12 +116,15 @@ class G1FixedBodyThrowEnv(gym.Env):
         landed=bool(self.released and ball_pos[2] <= self.ball_radius+0.015)
         if landed and self.landing_error is None:
             self.landing_error=xy_error; self.success=bool(xy_error <= self.success_radius)
-        obs=self._get_obs(); reward=self._compute_reward(action, landed); terminated=landed; truncated=bool(self.step_count*self.control_dt>=self.episode_time)
-        info={'dist_to_target':xy_error,'best_dist':float(self.best_dist),'landing_error':self.landing_error,'success':self.success,'released':self.released,'release_time':self.release_time,'arm_joint_names':self.arm_joint_names}
+        self.robot_fell=bool(self.base_body_id >= 0 and self.data.xpos[self.base_body_id,2] < self.fall_height)
+        obs=self._get_obs(); reward=self._compute_reward(action, landed); terminated=bool(landed or self.robot_fell); truncated=bool(self.step_count*self.control_dt>=self.episode_time)
+        info={'dist_to_target':xy_error,'best_dist':float(self.best_dist),'landing_error':self.landing_error,'success':self.success,'released':self.released,'release_time':self.release_time,'completion_time':self.step_count*self.control_dt if landed else None,'robot_fell':self.robot_fell,'arm_joint_names':self.arm_joint_names}
         self.prev_action=action.copy(); return obs,float(reward),terminated,truncated,info
     def _compute_reward(self, action, landed):
         xy_error=np.linalg.norm(self._ball_pos()[:2]-self.target_pos[:2])
         reward=-0.002*np.linalg.norm(action[:self.n_arm])-0.002*np.linalg.norm(action-self.prev_action)
+        if self.robot_fell:
+            return reward-5.0
         if landed:
             return reward + (10.0 if self.success else np.exp(-6.0*xy_error))
         if self.released:

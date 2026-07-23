@@ -79,3 +79,25 @@ Both the baseline and PPO should be evaluated with the same metrics:
 - action smoothness.
 
 The current evaluator records success, landing error, release time, and reward. Add fall and smoothness reporting before final PPO comparison.
+
+## PPO training
+
+After the baseline scene has been generated, train PPO with the same 8-action
+interface: seven right-arm targets and one ball-release command.
+
+```bash
+python scripts/train_ppo_g1_drop.py --timesteps 200000
+```
+
+Models and evaluation checkpoints are written under `policies/g1_ball_drop_ppo/`.
+Use the best checkpoint for the final comparison:
+
+```bash
+python evaluation_scripts/evaluate_ppo.py \
+  --model policies/g1_ball_drop_ppo/best_model.zip \
+  --episodes 20
+```
+
+The PPO evaluator reports success rate, landing error, completion time, robot
+falls, and mean action change (smoothness), matching the intended comparison
+metrics.
