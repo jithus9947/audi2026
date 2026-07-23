@@ -87,6 +87,29 @@ python scripts\play_baseline_g1_throw.py
 
 Close the MuJoCo window or press `Ctrl+C` to stop it.
 
+## Reinforcement learning pipeline
+
+The repository also includes an `RL/` pipeline for training and evaluating a PPO agent on the same G1 ball-drop task.
+
+- `RL/train.py` trains PPO and saves run artifacts under `RL/runs/<run-name>/`.
+- `RL/evaluate.py` evaluates both the scripted baseline and the trained PPO policy under the same task settings.
+- `RL/plot_results.py` renders training curves and baseline-vs-PPO comparison figures.
+- `RL/README.md` contains the full PPO pipeline documentation and usage examples.
+
+Run the RL pipeline with:
+
+```bash
+python RL/train.py
+python RL/evaluate.py
+python RL/plot_results.py
+```
+
+Use TensorBoard to inspect training logs:
+
+```bash
+tensorboard --logdir RL/runs
+```
+
 ### Tune the free-throw baseline
 
 Edit the values at the top of `baselines/baseline_controller.py`, then restart
