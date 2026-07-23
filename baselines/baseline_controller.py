@@ -1,7 +1,7 @@
 """Deterministic open-loop G1 forward-throw controller.
 
-Edit ``SAFE_START_ACTION``, ``THROW_END_ACTION`` and the two time values below
-to tune the baseline motion.  Each action value is in [-1, 1], not radians.
+Edit ``SAFE_START_ACTION``, ``THROW_END_JOINT_TARGET_RAD`` and the two time
+values below to tune the baseline motion.
 """
 
 import numpy as np
@@ -16,12 +16,15 @@ SAFE_START_ACTION = np.array(
     [0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00], dtype=np.float32
 )
 
-# Forward end pose. Change these seven values to tune the throwing direction.
-THROW_END_ACTION = np.array(
-    [-1.00, 0.80, 0.05, -0.85, 0.23, 0.15, -0.01], dtype=np.float32
+# Forward end pose in radians, in the controller's required order:
+# shoulder pitch, shoulder roll, shoulder yaw, elbow, wrist roll, wrist pitch,
+# wrist yaw.  This is the pose supplied for the right arm, reordered from the
+# table where shoulder roll appeared first.
+THROW_END_JOINT_TARGET_RAD = np.array(
+    [-1.16, 1.10, 0.197, 1.26, 1.87, -0.0646, 0.00], dtype=np.float32
 )
 
-# Motion timing in seconds. Reducing FORWARD_SWING_END makes the throw faster.
+# Motion timing in seconds. Reducing RELEASE_TIME makes the throw faster.
 FORWARD_SWING_START = 0.12
 RELEASE_TIME = 0.50
 
@@ -35,7 +38,9 @@ class BaselineController:
         forward_swing_start=FORWARD_SWING_START,
         release_time=RELEASE_TIME,
         safe_start_action=SAFE_START_ACTION,
-        throw_end_action=THROW_END_ACTION,
+        throw_end_joint_target_rad=THROW_END_JOINT_TARGET_RAD,
+        nominal_joint_target_rad=None,
+        action_scale=0.5,
     ):
         self.n_arm = n_arm
         self.forward_swing_start = float(forward_swing_start)
@@ -43,7 +48,21 @@ class BaselineController:
         if not 0 <= self.forward_swing_start < self.release_time:
             raise ValueError("Require 0 <= forward_swing_start < release_time")
         self.safe_start_action = np.clip(np.asarray(safe_start_action, dtype=np.float32), -1, 1)
-        self.throw_end_action = np.clip(np.asarray(throw_end_action, dtype=np.float32), -1, 1)
+        self.throw_end_joint_target_rad = np.asarray(
+            throw_end_joint_target_rad, dtype=np.float32
+        )
+        if nominal_joint_target_rad is None:
+            raise ValueError(
+                "Pass nominal_joint_target_rad from G1FixedBodyThrowEnv when "
+                "constructing BaselineController."
+            )
+        nominal = np.asarray(nominal_joint_target_rad, dtype=np.float32)
+        if nominal.shape != self.throw_end_joint_target_rad.shape:
+            raise ValueError("nominal_joint_target_rad has the wrong shape")
+        # The environment applies: nominal target + action_scale * action.
+        # Convert the readable joint-angle pose to that normalised action.
+        raw_action = (self.throw_end_joint_target_rad - nominal) / float(action_scale)
+        self.throw_end_action = np.clip(raw_action, -1, 1)
 
     @staticmethod
     def smoothstep(x):

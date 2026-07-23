@@ -17,7 +17,11 @@ def evaluate(num_episodes=10, base_seed=42):
         learned_release=True
     )
 
-    controller = BaselineController(env.n_arm)
+    controller = BaselineController(
+        env.n_arm,
+        nominal_joint_target_rad=env.nominal_ctrl[env.arm_actuator_ids],
+        action_scale=env.action_scale,
+    )
 
     success = 0
 

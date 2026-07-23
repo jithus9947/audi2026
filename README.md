@@ -79,8 +79,9 @@ right elbow, right wrist roll, right wrist pitch, right wrist yaw
 ```
 
 `SAFE_START_ACTION` is the pose before the throw and should keep the hand well
-away from the legs. `THROW_END_ACTION` is the forward end pose. Both use
-normalised values from `-1` to `1`; they are not direct joint angles. Increase
+away from the legs; it uses normalised values from `-1` to `1`.
+`THROW_END_JOINT_TARGET_RAD` is the forward end pose in radians. The viewer
+prints if any supplied joint value is clipped to a G1 safety limit. Increase
 `RELEASE_TIME` for a slower arm swing or reduce it slightly for a faster throw.
 Keep `FORWARD_SWING_START < RELEASE_TIME`.
 

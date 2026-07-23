@@ -6,6 +6,7 @@ import sys
 import time
 
 import mujoco.viewer
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -23,7 +24,22 @@ def main():
     )
     if target_geom >= 0:
         env.model.geom_rgba[target_geom, 3] = 0.0
-    controller = BaselineController(env.n_arm)
+    controller = BaselineController(
+        env.n_arm,
+        nominal_joint_target_rad=env.nominal_ctrl[env.arm_actuator_ids],
+        action_scale=env.action_scale,
+    )
+    applied_targets = np.clip(
+        controller.throw_end_joint_target_rad,
+        env.arm_joint_lower,
+        env.arm_joint_upper,
+    )
+    print("Baseline right-arm end pose (radians):")
+    for name, requested, applied in zip(
+        env.arm_joint_names, controller.throw_end_joint_target_rad, applied_targets
+    ):
+        note = " (clipped to joint limit)" if not np.isclose(requested, applied) else ""
+        print(f"  {name}: {requested:.4f}{note}")
     obs, _ = env.reset(seed=42)
 
     print("Baseline viewer running. Close the MuJoCo window or press Ctrl+C to stop.")
