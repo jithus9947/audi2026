@@ -68,6 +68,22 @@ mjpython scripts/play_baseline_g1_throw.py
 
 Close the MuJoCo window or press `Ctrl+C` to stop it.
 
+### Tune the free-throw baseline
+
+Edit the values at the top of `baselines/baseline_controller.py`, then restart
+the viewer. The seven values use this order:
+
+```text
+right shoulder pitch, right shoulder roll, right shoulder yaw,
+right elbow, right wrist roll, right wrist pitch, right wrist yaw
+```
+
+`SAFE_START_ACTION` is the pose before the throw and should keep the hand well
+away from the legs. `THROW_END_ACTION` is the forward end pose. Both use
+normalised values from `-1` to `1`; they are not direct joint angles. Increase
+`RELEASE_TIME` for a slower arm swing or reduce it slightly for a faster throw.
+Keep `FORWARD_SWING_START < RELEASE_TIME`.
+
 ## Evaluation metrics
 
 Both the baseline and PPO should be evaluated with the same metrics:
