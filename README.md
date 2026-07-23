@@ -101,3 +101,14 @@ python evaluation_scripts/evaluate_ppo.py \
 The PPO evaluator reports success rate, landing error, completion time, robot
 falls, and mean action change (smoothness), matching the intended comparison
 metrics.
+
+To watch the learned PPO policy in MuJoCo on macOS, use `mjpython` (not plain
+`python`):
+
+```bash
+mjpython scripts/play_ppo_g1_drop.py \
+  --model policies/g1_ball_drop_ppo/best_model.zip
+```
+
+Use `--speed 0.5` for slow motion. The viewer continually resets and plays new
+episodes; it does not train while the window is open.

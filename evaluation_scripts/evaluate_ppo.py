@@ -43,6 +43,12 @@ def evaluate(model_path: Path, episodes: int = 20, base_seed: int = 42):
             landing_errors.append(info['landing_error'])
         if info['completion_time'] is not None:
             completion_times.append(info['completion_time'])
+        landing = f"{info['landing_error']:.3f} m" if info['landing_error'] is not None else 'no landing'
+        print(
+            f"Episode {episode + 1}/{episodes}: success={info['success']}, "
+            f"landing error={landing}, fell={info['robot_fell']}",
+            flush=True,
+        )
 
     print('PPO EVALUATION SUMMARY')
     print(f'Episodes: {episodes}')
