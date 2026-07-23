@@ -12,7 +12,8 @@ The robot must move its right arm forward and release a 50 g ball so its first g
 - Hand model: rigid five-finger visual hand; finger control is intentionally out of scope
 - Arm safety: all arm commands are clipped to MuJoCo joint ranges with an 0.08 rad margin
 
-The target and ball scene are generated as `assets/unitree_g1/scene_throw.xml` from the Menagerie `scene.xml` model.
+The repository includes the Unitree G1 model assets and the generated
+`assets/unitree_g1/scene_throw.xml` ball scene.
 
 ## Setup
 
@@ -25,19 +26,12 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Fetch the G1 assets once:
+No separate Unitree or MuJoCo Menagerie clone is required. The G1 XML, meshes,
+textures, license, and generated ball scene are already under
+`assets/unitree_g1/`.
 
-```bash
-mkdir -p external assets/unitree_g1
-git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git external/mujoco_menagerie
-cp -R external/mujoco_menagerie/unitree_g1/. assets/unitree_g1/
-```
-
-The full shallow clone is intentional: the G1 XML files reference mesh assets,
-so a filtered/sparse checkout can leave required files unavailable on another
-machine.
-
-Generate the ball-drop scene:
+Only regenerate the scene after intentionally changing its source or hand
+attachment settings:
 
 ```bash
 python scripts/create_g1_throw_scene.py --hand-body right_wrist_yaw_link
