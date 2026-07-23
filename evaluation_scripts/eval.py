@@ -8,7 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from envs.g1_fixed_body_throw_env import G1FixedBodyThrowEnv
-from baselines.baseline_controller import BASELINE_ACTION_SCALE, BaselineController
+from baselines.baseline_controller import (
+    BASELINE_ACTION_SCALE,
+    SUPPORT_LEG_JOINT_OFFSETS_RAD,
+    BaselineController,
+)
 
 
 def evaluate(num_episodes=10, base_seed=42):
@@ -17,6 +21,7 @@ def evaluate(num_episodes=10, base_seed=42):
         learned_release=True,
         action_scale=BASELINE_ACTION_SCALE,
     )
+    env.apply_joint_target_offsets(SUPPORT_LEG_JOINT_OFFSETS_RAD)
 
     controller = BaselineController(
         env.n_arm,

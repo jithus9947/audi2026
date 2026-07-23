@@ -82,8 +82,10 @@ right elbow, right wrist roll, right wrist pitch, right wrist yaw
 away from the legs; it uses normalised values from `-1` to `1`.
 `THROW_END_JOINT_TARGET_RAD` is the forward end pose in radians. The viewer
 prints if any supplied joint value is clipped to a G1 safety limit. Increase
-`RELEASE_TIME` for a slower arm swing or reduce it slightly for a faster throw.
-Keep `FORWARD_SWING_START < RELEASE_TIME`.
+`RELEASE_TIME` for a later release or reduce it for an earlier release.
+`FORWARD_SWING_END` must remain after `RELEASE_TIME`: that makes the wrist
+move through the release instead of stopping and dropping the ball. Keep
+`FORWARD_SWING_START < RELEASE_TIME < FORWARD_SWING_END`.
 
 The baseline viewer uses a wider, baseline-only arm action range so the stated
 radian targets can actually be reached. PPO continues to use its original

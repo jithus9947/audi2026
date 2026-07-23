@@ -64,6 +64,23 @@ class G1FixedBodyThrowEnv(gym.Env):
             if found<0: raise RuntimeError(f'Could not find actuator for joint {jname}. Run scripts/inspect_g1.py.')
             ids.append(found)
         return np.array(ids,dtype=np.int32)
+    def apply_joint_target_offsets(self, offsets):
+        """Add fixed radian offsets to position-actuated joints safely."""
+        for joint_name, offset in offsets.items():
+            joint_id=mujoco.mj_name2id(self.model,mujoco.mjtObj.mjOBJ_JOINT,joint_name)
+            if joint_id < 0:
+                raise ValueError(f"Unknown joint: {joint_name}")
+            actuator_id=-1
+            for aid in range(self.model.nu):
+                if self.model.actuator_trnid[aid,0] == joint_id:
+                    actuator_id=aid; break
+            if actuator_id < 0:
+                raise ValueError(f"No position actuator for joint: {joint_name}")
+            lower=self.model.jnt_range[joint_id,0]+self.joint_safety_margin
+            upper=self.model.jnt_range[joint_id,1]-self.joint_safety_margin
+            self.nominal_ctrl[actuator_id]=np.clip(
+                self.nominal_ctrl[actuator_id]+float(offset), lower, upper
+            )
     def _init_nominal_pose(self):
         mujoco.mj_resetData(self.model,self.data)
         if self.model.nkey>0: mujoco.mj_resetDataKeyframe(self.model,self.data,0)

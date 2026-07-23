@@ -11,7 +11,11 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from baselines.baseline_controller import BASELINE_ACTION_SCALE, BaselineController
+from baselines.baseline_controller import (
+    BASELINE_ACTION_SCALE,
+    SUPPORT_LEG_JOINT_OFFSETS_RAD,
+    BaselineController,
+)
 from envs.g1_fixed_body_throw_env import G1FixedBodyThrowEnv
 
 
@@ -20,6 +24,7 @@ def main():
         learned_release=True,
         action_scale=BASELINE_ACTION_SCALE,
     )
+    env.apply_joint_target_offsets(SUPPORT_LEG_JOINT_OFFSETS_RAD)
     # The target belongs to the PPO drop environment. This baseline is a free
     # forward throw, so hide the non-colliding target marker in this viewer.
     target_geom = mujoco.mj_name2id(
@@ -43,6 +48,7 @@ def main():
     ):
         note = " (clipped to joint limit)" if not np.isclose(requested, applied) else ""
         print(f"  {name}: {requested:.4f}{note}")
+    print("Left support-leg offsets (radians):", SUPPORT_LEG_JOINT_OFFSETS_RAD)
     obs, _ = env.reset(seed=42)
 
     print("Baseline viewer running. Close the MuJoCo window or press Ctrl+C to stop.")

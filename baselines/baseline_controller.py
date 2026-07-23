@@ -16,22 +16,36 @@ SAFE_START_ACTION = np.array(
     [0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00], dtype=np.float32
 )
 
-# Forward end pose in radians, in the controller's required order:
+# Configured forward end pose in radians, in the controller's required order.
+#
 # shoulder pitch, shoulder roll, shoulder yaw, elbow, wrist roll, wrist pitch,
-# wrist yaw.  This is the pose supplied for the right arm, reordered from the
-# table where shoulder roll appeared first.
+# wrist yaw.
 THROW_END_JOINT_TARGET_RAD = np.array(
     [-1.16, 1.10, 0.197, 1.26, 1.87, -0.0646, 0.00], dtype=np.float32
 )
 
-# Motion timing in seconds. Reducing RELEASE_TIME makes the throw faster.
+# Motion timing in seconds. The ball releases before FORWARD_SWING_END so the
+# wrist is still moving forward at release.
 FORWARD_SWING_START = 0.12
-RELEASE_TIME = 0.50
+# Release while the arm is still moving.  The swing continues afterwards so
+# the wrist has forward velocity at the instant the ball is released.
+RELEASE_TIME = 0.42
+FORWARD_SWING_END = 0.62
 
 # The target shoulder and wrist angles are more than 0.5 rad from the nominal
 # pose. This range is used only by the deterministic baseline; the PPO drop
 # environment keeps its original 0.5-rad action scale.
 BASELINE_ACTION_SCALE = 2.0
+
+# Small left-leg support stance for a right-arm forward throw. These are offsets
+# from the standing keyframe (radians), not a walking step. The forward hip
+# shift and modest knee bend counter the arm motion while both feet remain on
+# the ground.
+SUPPORT_LEG_JOINT_OFFSETS_RAD = {
+    "left_hip_pitch_joint": -0.08,
+    "left_knee_joint": 0.10,
+    "left_ankle_pitch_joint": -0.04,
+}
 
 
 class BaselineController:
@@ -42,6 +56,7 @@ class BaselineController:
         n_arm,
         forward_swing_start=FORWARD_SWING_START,
         release_time=RELEASE_TIME,
+        forward_swing_end=FORWARD_SWING_END,
         safe_start_action=SAFE_START_ACTION,
         throw_end_joint_target_rad=THROW_END_JOINT_TARGET_RAD,
         nominal_joint_target_rad=None,
@@ -50,8 +65,11 @@ class BaselineController:
         self.n_arm = n_arm
         self.forward_swing_start = float(forward_swing_start)
         self.release_time = float(release_time)
-        if not 0 <= self.forward_swing_start < self.release_time:
-            raise ValueError("Require 0 <= forward_swing_start < release_time")
+        self.forward_swing_end = float(forward_swing_end)
+        if not 0 <= self.forward_swing_start < self.release_time < self.forward_swing_end:
+            raise ValueError(
+                "Require 0 <= forward_swing_start < release_time < forward_swing_end"
+            )
         self.safe_start_action = np.clip(np.asarray(safe_start_action, dtype=np.float32), -1, 1)
         self.throw_end_joint_target_rad = np.asarray(
             throw_end_joint_target_rad, dtype=np.float32
@@ -85,7 +103,7 @@ class BaselineController:
             # A fast forward swing gives the released ball forward velocity.
             progress = self.smoothstep(
                 (float(t) - self.forward_swing_start)
-                / (self.release_time - self.forward_swing_start)
+                / (self.forward_swing_end - self.forward_swing_start)
             )
             action[:count] = (
                 self.safe_start_action[:count]
