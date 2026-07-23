@@ -21,7 +21,7 @@ SAFE_START_ACTION = np.array(
 # wrist yaw.  This is the pose supplied for the right arm, reordered from the
 # table where shoulder roll appeared first.
 THROW_END_JOINT_TARGET_RAD = np.array(
-    [-1.16, 1.10, 0.197, 1.26, 1.87, -0.0646, 0.00], dtype=np.float32
+    [1.10, -1.16, 0.197, 1.26, 1.87, -0.0646, 0.00], dtype=np.float32
 )
 
 # Motion timing in seconds. Reducing RELEASE_TIME makes the throw faster.
