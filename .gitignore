@@ -3,6 +3,7 @@
 **/.DS_Store
 __pycache__/
 *.py[cod]
+.vscode/
 
 # Local Python environments and downloaded third-party robot assets.
 external/

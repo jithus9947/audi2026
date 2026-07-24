@@ -23,8 +23,10 @@
     </body>
 
     <body name="throw_target" pos="0.45 0.0 0.01">
+      <!-- Target marker hidden (alpha=0): env still reads this body's position,
+           the disc is just not rendered for the distance-throw task. -->
       <geom name="throw_target_geom" type="cylinder" size="0.18 0.003"
-            contype="0" conaffinity="0" rgba="0.1 0.8 0.2 0.45"/>
+            contype="0" conaffinity="0" rgba="0.1 0.8 0.2 0"/>
     </body>
 
   </worldbody>

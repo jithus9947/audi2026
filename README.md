@@ -131,6 +131,89 @@ The baseline viewer uses a wider, baseline-only arm action range so the stated
 radian targets can actually be reached. PPO continues to use its original
 action scaling and is not affected.
 
+## Level 0 + Level 1 target-throw RL task
+
+`envs/g1_target_throw_env.py` adds a new task on top of the existing pipeline
+without changing `envs/g1_fixed_body_throw_env.py`, `baselines/baseline_controller.py`,
+`baselines/play_step_throw.py`, or any `scripts/play_*.py`:
+
+- **Level 0 (compulsory):** the pelvis must stay fixed (no drifting, no turning) while throwing.
+- **Level 1, option 1:** land the ball inside a small square target 5 m away.
+
+Every requirement is its own reward term in `envs/reward_components.py`
+(pelvis stability, forward/backward arm motion, side-to-side wrist rotation,
+self-collision, foot/ground contact, projectile straightness) plus a set of
+one-time landing-event terms scored only from the ball's first confirmed
+landing position (distance progress, dense landing accuracy, undershoot/
+overshoot, lateral accuracy, target-hit bonus) -- see the event state machine
+in `envs/g1_target_throw_env.py` for how release/landing are each detected
+exactly once per episode.
+
+Every invocation creates its own timestamped run directory under
+`RL/runs/<run-name>/<timestamp>_iter<N>_env<E>_seed<S>/` -- nothing from a
+previous run (checkpoints, best models, TensorBoard logs, CSVs) is ever
+overwritten. See `docs/training_pipeline.md`-style summary below for the
+full layout, or just run `python RL/compare_runs.py` to see every run you've
+done so far.
+
+Start everything -- PPO training (headless by default) + TensorBoard -- with
+one command:
+
+```bash
+python RL/run.py
+```
+
+TensorBoard opens automatically at `http://localhost:6006`. Pass `--viewer`
+to also open the tiled MuJoCo window (costs FPS -- off by default for
+production training). Ctrl+C stops both subprocesses cleanly (saves an
+emergency checkpoint first).
+
+Benchmark parallel-env counts on your hardware before a long run (does not
+assume more envs = faster; measures each, recommends the best):
+
+```bash
+python RL/benchmark_envs.py --benchmark-envs 8 16 24 32 --benchmark-iterations 10 --device auto
+```
+
+Run pieces individually if preferred:
+
+```bash
+python RL/train_target_throw.py --iterations 4000 --n-envs 16 --checkpoint-every 500
+tensorboard --logdir RL/runs/target_throw_5m/<run-id>/tensorboard
+python RL/multi_viewer.py --run-dir RL/runs/target_throw_5m/<run-id>
+python RL/compare_runs.py                 # table of every run's final metrics
+python RL/storage_report.py               # disk usage per run (report-only, no deletion)
+```
+
+### Fine-tune an existing checkpoint
+
+Continues the timestep count instead of resetting it, and writes to a new
+run directory so the original run is never overwritten:
+
+```bash
+python RL/train_target_throw.py \
+  --resume-from RL/runs/target_throw/final_model.zip \
+  --output RL/runs/target_throw_5m_finetune \
+  --iterations 1000 --checkpoint-every 100 --eval-interval 50 \
+  --learning-rate 1e-4 --debug-events
+```
+
+Or via the single-command launcher: `python RL/run.py --resume-from RL/runs/target_throw/final_model.zip --iterations 1000`.
+
+### Evaluate and debug
+
+```bash
+python RL/evaluate_throw.py --model RL/runs/target_throw/final_model.zip --episodes 100
+python RL/evaluate_throw.py --model RL/runs/target_throw/best_models/best_landing_error_model.zip --episodes 20 --render --debug-events
+python RL/visual_debug.py --model RL/runs/target_throw/final_model.zip   # draws target box, release/landing points, trajectory, error line
+python -m pytest RL/test_target_throw_events.py -v                       # geometry/event unit tests
+```
+
+Each run directory also gets `episodes.csv` (one row per completed episode),
+`run_manifest.json` (args + reward weights + resume provenance), and
+`best_models/` (best-by-reward, best-by-landing-error, best-by-hit-rate,
+best-by-forward-distance, each tracked and saved independently).
+
 ## Evaluation metrics
 
 Both the baseline and PPO should be evaluated with the same metrics:

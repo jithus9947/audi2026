@@ -10,5 +10,6 @@ typeguard
 stable-baselines3
 torch
 tensorboard
+psutil
 mkdocs
 mkdocs-material
