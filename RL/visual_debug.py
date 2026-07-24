@@ -26,12 +26,19 @@ import mujoco.viewer
 import numpy as np
 
 from envs.g1_target_throw_env import G1TargetThrowEnv
+from envs.hand_geometry import get_palm_frame
 
 TARGET_RGBA = np.array([0.1, 0.9, 0.2, 0.5], dtype=np.float32)
 RELEASE_RGBA = np.array([0.9, 0.9, 0.1, 1.0], dtype=np.float32)
 LANDING_RGBA = np.array([0.9, 0.1, 0.1, 1.0], dtype=np.float32)
 TRAJECTORY_RGBA = np.array([0.2, 0.6, 1.0, 0.8], dtype=np.float32)
 ERROR_LINE_RGBA = np.array([1.0, 1.0, 1.0, 0.9], dtype=np.float32)
+PALM_AXIS_RGBA = (
+    np.array([1.0, 0.2, 0.2, 1.0], dtype=np.float32),  # forward (local +x): red
+    np.array([0.2, 1.0, 0.2, 1.0], dtype=np.float32),  # local +y: green
+    np.array([0.2, 0.4, 1.0, 1.0], dtype=np.float32),  # normal (local +z): blue
+)
+EXPECTED_BALL_RGBA = np.array([1.0, 0.6, 0.0, 0.6], dtype=np.float32)
 IDENTITY_MAT = np.eye(3).flatten()
 
 
@@ -50,6 +57,16 @@ def _add_line(scn, start, end, width, rgba):
     mujoco.mjv_initGeom(geom, mujoco.mjtGeom.mjGEOM_LINE, np.zeros(3), np.zeros(3), IDENTITY_MAT, rgba)
     mujoco.mjv_connector(geom, mujoco.mjtGeom.mjGEOM_LINE, width, np.asarray(start, dtype=np.float64), np.asarray(end, dtype=np.float64))
     scn.ngeom += 1
+
+
+def _add_palm_frame(scn, position, rot_mat, length=0.12):
+    """Item 14: palm coordinate frame -- red=forward (local +x, the axis the
+    hold offset and hand mesh both align with), green=local +y, blue=surface
+    normal convention (local +z). See envs/hand_geometry.py for why these
+    conventions were chosen (no independent palm DOF in this model)."""
+    for axis in range(3):
+        direction = rot_mat[:, axis]
+        _add_line(scn, position, position + direction * length, 2.5, PALM_AXIS_RGBA[axis])
 
 
 def _add_box_outline(scn, center_xy, half_size, z, rgba):
@@ -92,7 +109,9 @@ def main() -> None:
     obs, _ = env.reset(seed=args.seed)
     episode = 1
     trajectory: list[np.ndarray] = []
+    last_phase = env.phase
     print("Visual debug running. Close the MuJoCo window or press Ctrl+C to stop.")
+    print(f"[episode {episode}] phase=ready")
 
     with mujoco.viewer.launch_passive(env.model, env.data) as viewer:
         while viewer.is_running():
@@ -103,11 +122,22 @@ def main() -> None:
             obs, reward, terminated, truncated, info = env.step(action)
             if info["ball_released"]:
                 trajectory.append(env._ball_pos().copy())
+            if info["phase"] != last_phase:
+                print(f"[episode {episode}] phase={last_phase} -> {info['phase']} (t={env.step_count * env.control_dt:.3f}s)")
+                last_phase = info["phase"]
 
             viewer.user_scn.ngeom = 0
             target_xy = np.asarray(env.target_pos[:2])
             _add_box_outline(viewer.user_scn, target_xy, env.target_half_size, env.target_pos[2] + 0.01, TARGET_RGBA)
             _add_sphere(viewer.user_scn, (*target_xy, env.target_pos[2] + 0.02), 0.03, TARGET_RGBA)
+
+            # Item 14: palm coordinate frame + expected vs actual ball centre.
+            hand_pos = env.data.xpos[env.hold_body_id]
+            hand_mat = env.data.xmat[env.hold_body_id].reshape(3, 3)
+            _add_palm_frame(viewer.user_scn, hand_pos, hand_mat)
+            if not info["ball_released"]:
+                expected_ball_pos = hand_pos + hand_mat @ env.hold_relpose[:3]
+                _add_sphere(viewer.user_scn, expected_ball_pos, env.ball_radius * 0.6, EXPECTED_BALL_RGBA)
 
             if info["release_position"] is not None:
                 _add_sphere(viewer.user_scn, info["release_position"], 0.03, RELEASE_RGBA)
@@ -126,11 +156,15 @@ def main() -> None:
                     f"Episode {episode}: released={info['ball_released']} "
                     f"landing_error={info['landing_error']} target_hit={info['square_target_hit']} "
                     f"longitudinal_error={info['longitudinal_error']} lateral_error={info['lateral_error']} "
+                    f"final_arm_pose_error={info['final_arm_pose_error']:.4f} "
+                    f"final_hand_linear_speed={info['final_hand_linear_speed']:.4f} "
                     f"termination={info['termination_reason']}"
                 )
                 episode += 1
                 trajectory = []
+                last_phase = None
                 obs, _ = env.reset(seed=args.seed + episode - 1)
+                print(f"[episode {episode}] phase=ready")
 
 
 if __name__ == "__main__":

@@ -102,6 +102,54 @@ class RewardWeights:
     overshoot_penalty: float = 3.5    # was 1.0; kept slightly below undershoot per spec ("symmetric or slightly weaker")
     target_hit_bonus: float = 15.0
 
+    # Continuous, per-step, motion-quality (new). Deliberately small -- these
+    # shape HOW the throw looks, not whether it lands well; the landing terms
+    # above must stay dominant so accuracy doesn't regress. Only active during
+    # the phases named in each function's docstring (e.g. palm_orientation
+    # only during throw/follow_through; recovery_pose only during
+    # recovery/hold) -- see G1TargetThrowEnv._compute_reward.
+    palm_orientation: float = 0.10
+    ball_palm_alignment: float = 0.10
+    joint_acceleration: float = 0.02
+    recovery_pose: float = 0.15
+    post_throw_velocity: float = 0.15
+
+    # Right-arm joint-reduction task (new): wrist_roll must stay within its
+    # calibrated interval, wrist_yaw should follow the phase-appropriate
+    # release envelope rather than jumping. Same small, shaping-only scale as
+    # the other motion-quality terms above -- see
+    # envs/right_arm_config.py:RightArmCalibration for the interval/envelope
+    # values these read from.
+    wrist_roll_interval: float = 0.10
+    wrist_yaw_release: float = 0.10
+
+
+@dataclass
+class MotionPhaseConfig:
+    """Timing + poses for the scripted ready/recovery/hold phases.
+
+    Only the THROW and FOLLOW_THROUGH phases are policy-controlled; READY,
+    RECOVERY, and HOLD are scripted by the environment (see
+    G1TargetThrowEnv._phase_action_override) specifically so "the arm
+    continues moving instead of returning to rest" cannot happen regardless
+    of what the policy outputs -- it's a hard environment guarantee, not
+    something left to reward shaping to hopefully learn.
+
+    ready_pose/rest_pose are NORMALIZED ACTIONS (length n_arm=7, same [-1,1]
+    space the policy outputs), not raw joint angles -- default zeros, i.e.
+    the model's own nominal/keyframe pose, matching
+    baselines/baseline_controller.py's SAFE_START_ACTION (also all-zero) so
+    the "safe, natural, collision-free" pose is the same one already
+    validated by the existing untouched baseline, not a new guess.
+    """
+
+    ready_pose_duration: float = 0.3
+    follow_through_duration: float = 0.15
+    recovery_duration: float = 0.5
+    ready_pose: tuple[float, ...] = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    rest_pose: tuple[float, ...] = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    ball_contact_margin: float = 0.002
+
 
 @dataclass
 class EventDetectionConfig:
@@ -251,6 +299,116 @@ def action_smoothness_penalty(env, action: np.ndarray) -> float:
         -0.5 * np.linalg.norm(arm_action) / np.sqrt(n)
         - 0.5 * np.linalg.norm(delta) / np.sqrt(max(len(delta), 1))
     )
+
+
+# ---------------------------------------------------------------------------
+# Continuous, per-step, motion-quality components (item 11). Each is only
+# meaningful -- and only added into the reward sum -- during specific phases;
+# see G1TargetThrowEnv._compute_reward for exactly when each applies.
+# ---------------------------------------------------------------------------
+
+
+def palm_orientation_reward(env) -> float:
+    """Raw in [-1, 1]: how well the palm/wrist's local +x (the model's own
+    "forward along the hand" axis -- see envs/hand_geometry.py) points toward
+    the target direction. Meant for the throw/follow-through phases, where
+    the spec asks for the palm to "rotate naturally toward the throwing
+    direction" -- this model has no independent palm DOF, so this scores the
+    one orientation that does exist: the wrist's.
+    """
+    forward = env.data.xmat[env.hold_body_id].reshape(3, 3)[:, 0]
+    target_direction = env.throw_direction_world  # unit vector, set once at reset
+    return float(np.dot(forward, target_direction))
+
+
+def ball_palm_alignment_reward(env) -> float:
+    """Raw in [-1, 0]: negative distance (m) between the ball and its expected
+    held position, while the ball is still attached. Should stay ~0 whenever
+    the weld constraint is holding normally; catches genuine drift/strain
+    rather than rewarding something that's mechanically guaranteed."""
+    expected_world = env.data.xpos[env.hold_body_id] + env.data.xmat[env.hold_body_id].reshape(3, 3) @ env.hold_relpose[:3]
+    actual_world = env._ball_pos()
+    return -float(np.linalg.norm(actual_world - expected_world))
+
+
+def joint_acceleration_penalty(env) -> float:
+    """Raw <= 0: penalizes large PHYSICAL joint accelerations (qacc), distinct
+    from action_smoothness_penalty which only penalizes jerky COMMANDS -- a
+    smoothly-commanded trajectory can still whip the arm around if it fights
+    the position controllers, and vice versa."""
+    qacc = env.data.qacc[env.arm_qvel_adr]
+    return -float(np.linalg.norm(qacc)) / 50.0  # /50 keeps this roughly unit-scale for typical accelerations
+
+
+def recovery_pose_reward(env) -> float:
+    """Raw in [-1, 0]: negative normalized distance from the arm's current
+    joint angles to the configured rest pose. Only meaningful during
+    recovery/hold -- the scripted controller already drives the arm there
+    directly, so this is confirmation the physical pose is actually
+    converging (not fighting some other force), not the primary mechanism."""
+    current = env.data.qpos[env.arm_qpos_adr]
+    error = float(np.linalg.norm(current - env.rest_pose_ctrl)) / max(len(current), 1) ** 0.5
+    return -float(np.clip(error, 0.0, 1.0))
+
+
+def _distance_to_interval(value: float, lower: float, upper: float) -> float:
+    if value < lower:
+        return lower - value
+    if value > upper:
+        return value - upper
+    return 0.0
+
+
+def wrist_roll_interval_reward(env) -> float:
+    """Raw <= 0: 0 while wrist_roll's actual (physical) angle sits inside its
+    calibrated [min, max] interval, else the (negative) distance outside it.
+    The action-space clamp (see G1TargetThrowEnv._active_action_low/high)
+    already keeps the COMMANDED target inside the interval at all times; this
+    scores the REALIZED qpos, which can still drift slightly outside under
+    PD-tracking lag/dynamics -- same "confirm it's actually converging, not
+    just commanded to" role as recovery_pose_reward."""
+    calib = env.right_arm_calibration
+    wrist_roll = float(env.data.qpos[env.arm_qpos_adr[env._wrist_roll_local_idx]])
+    return -_distance_to_interval(wrist_roll, calib.wrist_roll_min, calib.wrist_roll_max)
+
+
+def wrist_yaw_reference(phase_progress: float, hold_value: float, release_value: float) -> float:
+    """Smooth (smoothstep) envelope from ``hold_value`` to ``release_value``
+    as ``phase_progress`` goes 0 -> 1. Shared by the reward term below and
+    available for the calibration tool / diagnostics to preview the same
+    curve the reward is scoring against."""
+    progress = float(np.clip(phase_progress, 0.0, 1.0))
+    smoothed = progress * progress * (3.0 - 2.0 * progress)
+    return hold_value + smoothed * (release_value - hold_value)
+
+
+def wrist_yaw_release_reward(env) -> float:
+    """Raw <= 0: negative distance between wrist_yaw's actual angle and the
+    phase-appropriate reference from wrist_yaw_reference() -- encourages a
+    smooth ramp from hold (0) toward the calibrated release value as the
+    throw phase progresses, rather than an instant jump. Only meaningful
+    (and only added into the reward, see G1TargetThrowEnv._compute_reward)
+    during the "throw" phase itself -- deliberately NOT rewarded during
+    ready/backswing (phase_progress would be ill-defined / this would
+    penalize wrist_yaw for correctly staying at 0 there) and not during
+    follow_through/recovery/hold, which are scripted anyway."""
+    calib = env.right_arm_calibration
+    t = env.step_count * env.control_dt
+    time_in_throw = max(0.0, t - env.motion_phases.ready_pose_duration)
+    progress = time_in_throw / max(calib.wrist_yaw_ramp_duration, 1e-6)
+    desired = wrist_yaw_reference(progress, calib.wrist_yaw_hold, calib.wrist_yaw_release_value)
+    actual = float(env.data.qpos[env.arm_qpos_adr[env._wrist_yaw_local_idx]])
+    return -abs(actual - desired)
+
+
+def post_throw_velocity_penalty(env) -> float:
+    """Raw <= 0: penalizes hand linear+angular speed. Only meaningful during
+    the HOLD phase, where the arm should be fully stationary."""
+    vel = np.zeros(6)
+    mujoco.mj_objectVelocity(env.model, env.data, mujoco.mjtObj.mjOBJ_BODY, env.hold_body_id, vel, 0)
+    angular_speed = float(np.linalg.norm(vel[:3]))
+    linear_speed = float(np.linalg.norm(vel[3:]))
+    return -(linear_speed + angular_speed)
 
 
 # ---------------------------------------------------------------------------
@@ -418,7 +576,9 @@ def print_reward_weight_report(
     print("Continuous, per-step:")
     for name in ("pelvis_fixed", "hand_forward", "hand_rotation", "self_collision",
                  "feet_contact", "bad_ground_contact", "projectile_straightness",
-                 "action_smoothness", "fall_penalty"):
+                 "action_smoothness", "fall_penalty", "palm_orientation", "ball_palm_alignment",
+                 "joint_acceleration", "recovery_pose", "post_throw_velocity",
+                 "wrist_roll_interval", "wrist_yaw_release"):
         print(f"  {name:28s} {getattr(weights, name):8.3f}")
     print("One-time, at release:")
     for name in ("release_speed", "premature_release_penalty"):

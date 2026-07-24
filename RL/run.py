@@ -64,6 +64,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume-from", type=Path, default=None, help="Existing .zip checkpoint to fine-tune from.")
     parser.add_argument("--output-dir", type=Path, default=None, help="Explicit run directory; default is a fresh timestamped one.")
     parser.add_argument("--learning-rate", type=float, default=None)
+    parser.add_argument("--eval-interval", type=int, default=None, help="Iterations between deterministic best-model evals; default matches train_target_throw.py's own default (50).")
+    parser.add_argument("--eval-episodes", type=int, default=None, help="Default matches train_target_throw.py's own default (50).")
     return parser.parse_args()
 
 
@@ -139,6 +141,10 @@ def main() -> None:
         train_cmd += ["--resume-from", str(args.resume_from)]
     if args.learning_rate is not None:
         train_cmd += ["--learning-rate", str(args.learning_rate)]
+    if args.eval_interval is not None:
+        train_cmd += ["--eval-interval", str(args.eval_interval)]
+    if args.eval_episodes is not None:
+        train_cmd += ["--eval-episodes", str(args.eval_episodes)]
     print("Starting training:", " ".join(train_cmd))
     train_proc = subprocess.Popen(train_cmd, cwd=str(ROOT))
 

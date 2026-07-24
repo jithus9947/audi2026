@@ -63,6 +63,29 @@ class TaskMetricsCallback(BaseCallback):
             "wrist_saturation_rate": deque(maxlen=window),
             "hand_speed_at_release": deque(maxlen=window),
             "max_hand_speed_before_release": deque(maxlen=window),
+            # Motion/palm-fix diagnostics.
+            "ball_to_palm_distance": deque(maxlen=window),
+            "palm_roll_at_release": deque(maxlen=window),
+            "palm_pitch_at_release": deque(maxlen=window),
+            "palm_yaw_at_release": deque(maxlen=window),
+            "palm_normal_alignment": deque(maxlen=window),
+            "final_arm_pose_error": deque(maxlen=window),
+            "final_hand_linear_speed": deque(maxlen=window),
+            "final_hand_angular_speed": deque(maxlen=window),
+            "reached_hold_phase": deque(maxlen=window),
+            "wrist_roll_at_release": deque(maxlen=window),
+            "wrist_yaw_at_release": deque(maxlen=window),
+        }
+        # Right-arm joint-reduction diagnostics logged EVERY step (not just
+        # episode-end, unlike the buffers above) -- should stay ~always 1.0;
+        # a drop means the calibrated constraints are being violated in the
+        # REALIZED physics, not just in the commanded action. A much larger
+        # window than the per-episode buffers' since it accumulates at
+        # control-step, not episode, frequency.
+        self._step_diagnostics: dict[str, deque] = {
+            "wrist_roll_in_range": deque(maxlen=window * 200),
+            "wrist_yaw_in_release_range": deque(maxlen=window * 200),
+            "fixed_joint_deviation": deque(maxlen=window * 200),
         }
         self._termination_counts = {reason: deque(maxlen=window) for reason in TERMINATION_REASONS}
 
@@ -73,8 +96,24 @@ class TaskMetricsCallback(BaseCallback):
             for key, value in info.get("reward_raw", {}).items():
                 self._raw_values.setdefault(key, []).append(value)
 
+            # Right-arm joint-reduction diagnostics: every step, not just
+            # episode-end, so the logged rate is "fraction of ALL steps in
+            # range across the rollout" rather than a single terminal-step
+            # sample.
+            if "wrist_roll_in_range" in info:
+                self._step_diagnostics["wrist_roll_in_range"].append(1.0 if info["wrist_roll_in_range"] else 0.0)
+                self._step_diagnostics["wrist_yaw_in_release_range"].append(
+                    1.0 if info["wrist_yaw_in_release_range"] else 0.0
+                )
+                self._step_diagnostics["fixed_joint_deviation"].append(float(info.get("fixed_joint_deviation", 0.0)))
+
             if "episode" not in info:
                 continue  # Monitor only sets this on the terminal step of an episode.
+
+            if info.get("release_time") is not None and info.get("wrist_roll_rad") is not None:
+                buf = self._episode_buffers
+                buf["wrist_roll_at_release"].append(float(info["wrist_roll_rad"]))
+                buf["wrist_yaw_at_release"].append(float(info["wrist_yaw_rad"]))
 
             buf = self._episode_buffers
             buf["throw_distance"].append(float(info.get("throw_distance", 0.0)))
@@ -120,6 +159,18 @@ class TaskMetricsCallback(BaseCallback):
             buf["shoulder_saturation_rate"].append(float(info.get("shoulder_saturation_rate", 0.0)))
             buf["elbow_saturation_rate"].append(float(info.get("elbow_saturation_rate", 0.0)))
             buf["wrist_saturation_rate"].append(float(info.get("wrist_saturation_rate", 0.0)))
+
+            if info.get("ball_to_palm_distance") is not None:
+                buf["ball_to_palm_distance"].append(float(info["ball_to_palm_distance"]))
+            if info.get("palm_roll_at_release") is not None:
+                buf["palm_roll_at_release"].append(float(info["palm_roll_at_release"]))
+                buf["palm_pitch_at_release"].append(float(info["palm_pitch_at_release"]))
+                buf["palm_yaw_at_release"].append(float(info["palm_yaw_at_release"]))
+                buf["palm_normal_alignment"].append(float(info["palm_normal_alignment"]))
+            buf["final_arm_pose_error"].append(float(info.get("final_arm_pose_error", 0.0)))
+            buf["final_hand_linear_speed"].append(float(info.get("final_hand_linear_speed", 0.0)))
+            buf["final_hand_angular_speed"].append(float(info.get("final_hand_angular_speed", 0.0)))
+            buf["reached_hold_phase"].append(1.0 if info.get("phase") == "hold" else 0.0)
 
             reason = info.get("termination_reason")
             for r in TERMINATION_REASONS:
@@ -193,6 +244,29 @@ class TaskMetricsCallback(BaseCallback):
         self.logger.record("task/shoulder_saturation_rate", float(np.mean(buf["shoulder_saturation_rate"])) if buf["shoulder_saturation_rate"] else 0.0)
         self.logger.record("task/elbow_saturation_rate", float(np.mean(buf["elbow_saturation_rate"])) if buf["elbow_saturation_rate"] else 0.0)
         self.logger.record("task/wrist_saturation_rate", float(np.mean(buf["wrist_saturation_rate"])) if buf["wrist_saturation_rate"] else 0.0)
+
+        if buf["ball_to_palm_distance"]:
+            self.logger.record("task/mean_ball_to_palm_distance_m", float(np.mean(buf["ball_to_palm_distance"])))
+        if buf["palm_roll_at_release"]:
+            self.logger.record("task/mean_palm_roll_at_release_deg", float(np.mean(buf["palm_roll_at_release"])))
+            self.logger.record("task/mean_palm_pitch_at_release_deg", float(np.mean(buf["palm_pitch_at_release"])))
+            self.logger.record("task/mean_palm_yaw_at_release_deg", float(np.mean(buf["palm_yaw_at_release"])))
+            self.logger.record("task/mean_palm_normal_alignment", float(np.mean(buf["palm_normal_alignment"])))
+        if buf["final_arm_pose_error"]:
+            self.logger.record("task/mean_final_arm_pose_error", float(np.mean(buf["final_arm_pose_error"])))
+            self.logger.record("task/mean_final_hand_linear_speed", float(np.mean(buf["final_hand_linear_speed"])))
+            self.logger.record("task/mean_final_hand_angular_speed", float(np.mean(buf["final_hand_angular_speed"])))
+        if buf["reached_hold_phase"]:
+            self.logger.record("task/reached_hold_phase_rate", float(np.mean(buf["reached_hold_phase"])))
+        if buf["wrist_roll_at_release"]:
+            self.logger.record("task/mean_wrist_roll_at_release_rad", float(np.mean(buf["wrist_roll_at_release"])))
+            self.logger.record("task/mean_wrist_yaw_at_release_rad", float(np.mean(buf["wrist_yaw_at_release"])))
+
+        diag = self._step_diagnostics
+        if diag["wrist_roll_in_range"]:
+            self.logger.record("task/wrist_roll_in_range_rate", float(np.mean(diag["wrist_roll_in_range"])))
+            self.logger.record("task/wrist_yaw_in_release_range_rate", float(np.mean(diag["wrist_yaw_in_release_range"])))
+            self.logger.record("task/mean_fixed_joint_deviation_rad", float(np.mean(diag["fixed_joint_deviation"])))
 
         for reason, values in self._termination_counts.items():
             if values:

@@ -1,0 +1,23 @@
+active_joints:
+- right_shoulder_pitch_joint
+- right_shoulder_roll_joint
+- right_elbow_joint
+- right_wrist_roll_joint
+- right_wrist_yaw_joint
+fixed_joints:
+  right_shoulder_yaw_joint: 0.0
+  right_wrist_pitch_joint: 0.02
+wrist_roll:
+  nominal: 1.652
+  minimum: 1.62
+  maximum: 1.7
+wrist_yaw:
+  hold: 0.0
+  release_minimum: 0.0
+  release_maximum: 0.2
+  release_value: 0.15
+  ramp_duration: 0.35
+ball_offset_local:
+  forward: -0.002
+  lateral: 0.036
+  vertical: 0.005
